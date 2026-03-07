@@ -37,7 +37,7 @@ def main(page: ft.Page):
     # --- UI Elements ---
     tasks_view = ft.Column()
     new_task_input = ft.TextField(hint_text="What needs to be done?", expand=True)
-    items_left = ft.Text("0 items left")
+    items_left = ft.Text("0 active tasks")
 
     # --- Storage Logic ---
     def save_data():
@@ -51,7 +51,7 @@ def main(page: ft.Page):
 
     def load_data():
         try:
-            # Load Theme safely
+            # 1. Load Theme safely
             saved_theme = page.client_storage.get("theme")
             if saved_theme:
                 page.theme_mode = ft.ThemeMode(saved_theme)
@@ -60,7 +60,7 @@ def main(page: ft.Page):
             else:
                 page.theme_mode = ft.ThemeMode.LIGHT
 
-            # Load Tasks safely
+            # 2. Load Tasks safely - check if key exists first
             if page.client_storage.contains_key("tasks"):
                 saved_tasks = page.client_storage.get("tasks")
                 if saved_tasks:
@@ -72,10 +72,12 @@ def main(page: ft.Page):
             update_view()
         except Exception as ex:
             print(f"Error loading data: {ex}")
+            # If it fails, just refresh the view to show an empty app instead of a crash
             update_view()
 
     # --- App Logic ---
     def update_view(e=None):
+        # Determine filter status
         status = filter_tabs.tabs[filter_tabs.selected_index].text
         count = 0
         for task in tasks_view.controls:
@@ -142,6 +144,7 @@ def main(page: ft.Page):
         )
     )
 
+    # Trigger the load sequence
     load_data()
 
 ft.app(target=main)
