@@ -41,29 +41,41 @@ def main(page: ft.Page):
 
     # --- Storage Logic ---
     def save_data():
-        # Save tasks
-        task_data = [{"name": t.task_name, "completed": t.completed} for t in tasks_view.controls]
-        page.client_storage.set("tasks", json.dumps(task_data))
-        # Save theme preference
-        page.client_storage.set("theme", page.theme_mode.value)
+        try:
+            task_data = [{"name": t.task_name, "completed": t.completed} for t in tasks_view.controls]
+            page.client_storage.set("tasks", json.dumps(task_data))
+            # Save theme as a string "dark" or "light"
+            page.client_storage.set("theme", page.theme_mode.value)
+        except Exception as e:
+            print(f"Save Error: {e}")
 
     def load_data():
-        # Load Theme
-        saved_theme = page.client_storage.get("theme")
-        page.theme_mode = ft.ThemeMode(saved_theme) if saved_theme else ft.ThemeMode.LIGHT
-        
-        # Load Tasks
-        saved_tasks = page.client_storage.get("tasks")
-        if saved_tasks:
-            for item in json.loads(saved_tasks):
-                tasks_view.controls.append(
-                    Task(item["name"], item["completed"], update_view, delete_task)
-                )
-        update_view()
+        try:
+            # Load Theme safely
+            saved_theme = page.client_storage.get("theme")
+            if saved_theme:
+                page.theme_mode = ft.ThemeMode(saved_theme)
+                # Update the icon to match the loaded theme
+                theme_icon.icon = ft.Icons.LIGHT_MODE if page.theme_mode == ft.ThemeMode.DARK else ft.Icons.DARK_MODE
+            else:
+                page.theme_mode = ft.ThemeMode.LIGHT
+
+            # Load Tasks safely
+            if page.client_storage.contains_key("tasks"):
+                saved_tasks = page.client_storage.get("tasks")
+                if saved_tasks:
+                    tasks_list = json.loads(saved_tasks)
+                    for item in tasks_list:
+                        tasks_view.controls.append(
+                            Task(item["name"], item["completed"], update_view, delete_task)
+                        )
+            update_view()
+        except Exception as ex:
+            print(f"Error loading data: {ex}")
+            update_view()
 
     # --- App Logic ---
     def update_view(e=None):
-        # Determine filter status
         status = filter_tabs.tabs[filter_tabs.selected_index].text
         count = 0
         for task in tasks_view.controls:
