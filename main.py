@@ -1,85 +1,135 @@
 import flet as ft
+import json
+
+class Task(ft.Column):
+    def __init__(self, name, completed, on_status_change, on_delete):
+        super().__init__()
+        self.completed = completed
+        self.task_name = name
+        self.on_status_change = on_status_change
+        self.on_delete = on_delete
+
+        self.display_task = ft.Checkbox(
+            value=self.completed, label=self.task_name, on_change=self.status_changed
+        )
+        self.controls = [
+            ft.Row(
+                alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                controls=[
+                    self.display_task,
+                    ft.IconButton(ft.Icons.DELETE_OUTLINE, icon_color="red", on_click=self.delete_clicked),
+                ],
+            )
+        ]
+
+    def status_changed(self, e):
+        self.completed = self.display_task.value
+        self.on_status_change()
+
+    def delete_clicked(self, e):
+        self.on_delete(self)
 
 def main(page: ft.Page):
-    page.title = "My Tasks Pro"
-    page.bgcolor = "#121212"
-    page.theme_mode = ft.ThemeMode.DARK
-    page.padding = 20
+    page.title = "Ultimate To-Do"
+    page.horizontal_alignment = ft.CrossAxisAlignment.CENTER
+    page.scroll = ft.ScrollMode.ADAPTIVE
     
-    page.window_width = 400 
-    page.window_height = 800
+    # --- UI Elements ---
+    tasks_view = ft.Column()
+    new_task_input = ft.TextField(hint_text="What needs to be done?", expand=True)
+    items_left = ft.Text("0 items left")
 
-    def add_task(e):
-        if not new_task.value: return
-        
-        # Priority selection
-        selected_priority = list(prio_selector.selected)[0]
-        p_color = {"Low": "#2ecc71", "Med": "#f1c40f", "High": "#e74c3c"}[selected_priority]
-        
-        # Task Container
-        task_card = ft.Container(
-            bgcolor="#1e1e1e",
-            padding=10,
-            border_radius=12,
-            margin=ft.margin.only(bottom=5)
-        )
+    # --- Storage Logic ---
+    def save_data():
+        # Save tasks
+        task_data = [{"name": t.task_name, "completed": t.completed} for t in tasks_view.controls]
+        page.client_storage.set("tasks", json.dumps(task_data))
+        # Save theme preference
+        page.client_storage.set("theme", page.theme_mode.value)
 
-        # UI using only Text - no icons at all
-        task_card.content = ft.Row([
-            ft.Container(width=5, height=30, bgcolor=p_color, border_radius=2),
-            ft.Checkbox(fill_color="#ebcb8b"),
-            ft.Text(new_task.value, expand=True, size=16),
-            # Replacing IconButton with TextButton to bypass icon errors
-            ft.TextButton(
-                content=ft.Text("DELETE", color="#ff5555", size=12, weight="bold"),
-                on_click=lambda _: delete_task(task_card)
-            ),
-        ], vertical_alignment=ft.CrossAxisAlignment.CENTER)
+    def load_data():
+        # Load Theme
+        saved_theme = page.client_storage.get("theme")
+        page.theme_mode = ft.ThemeMode(saved_theme) if saved_theme else ft.ThemeMode.LIGHT
         
-        task_view.controls.append(task_card)
-        new_task.value = ""
+        # Load Tasks
+        saved_tasks = page.client_storage.get("tasks")
+        if saved_tasks:
+            for item in json.loads(saved_tasks):
+                tasks_view.controls.append(
+                    Task(item["name"], item["completed"], update_view, delete_task)
+                )
+        update_view()
+
+    # --- App Logic ---
+    def update_view(e=None):
+        # Determine filter status
+        status = filter_tabs.tabs[filter_tabs.selected_index].text
+        count = 0
+        for task in tasks_view.controls:
+            task.visible = (
+                status == "all"
+                or (status == "active" and not task.completed)
+                or (status == "completed" and task.completed)
+            )
+            if not task.completed:
+                count += 1
+        
+        items_left.value = f"{count} active tasks"
+        save_data()
         page.update()
 
-    def delete_task(card):
-        task_view.controls.remove(card)
+    def add_clicked(e):
+        if new_task_input.value != "":
+            tasks_view.controls.append(
+                Task(new_task_input.value, False, update_view, delete_task)
+            )
+            new_task_input.value = ""
+            update_view()
+
+    def delete_task(task):
+        tasks_view.controls.remove(task)
+        update_view()
+
+    def clear_completed(e):
+        for task in tasks_view.controls[:]:
+            if task.completed:
+                tasks_view.controls.remove(task)
+        update_view()
+
+    def toggle_theme(e):
+        page.theme_mode = ft.ThemeMode.DARK if page.theme_mode == ft.ThemeMode.LIGHT else ft.ThemeMode.LIGHT
+        theme_icon.icon = ft.Icons.LIGHT_MODE if page.theme_mode == ft.ThemeMode.DARK else ft.Icons.DARK_MODE
+        save_data()
         page.update()
 
-    new_task = ft.TextField(
-        hint_text="What needs to be done?",
-        expand=True,
-        border_color="#333333",
-        bgcolor="#1a1a1a",
-        border_radius=10,
+    # --- Layout Components ---
+    theme_icon = ft.IconButton(ft.Icons.DARK_MODE, on_click=toggle_theme)
+    
+    filter_tabs = ft.Tabs(
+        selected_index=0,
+        on_change=update_view,
+        tabs=[ft.Tab(text="all"), ft.Tab(text="active"), ft.Tab(text="completed")],
     )
-
-    prio_selector = ft.SegmentedButton(
-        selected=["Low"], 
-        allow_multiple_selection=False,
-        segments=[
-            ft.Segment(value="Low", label=ft.Text("Low")),
-            ft.Segment(value="Med", label=ft.Text("Med")),
-            ft.Segment(value="High", label=ft.Text("High")),
-        ],
-    )
-
-    task_view = ft.Column(scroll=ft.ScrollMode.ADAPTIVE, expand=True)
 
     page.add(
-        ft.Text("✨ My Tasks", size=32, weight="bold"),
         ft.Row([
-            new_task, 
-            # Using a simple button with text for the main "Add" action
-            ft.ElevatedButton(
-                content=ft.Text("ADD", color="black", weight="bold"),
-                bgcolor="#ebcb8b", 
-                on_click=add_task
-            )
+            ft.Text("My Tasks", style=ft.TextThemeStyle.HEADLINE_MEDIUM, expand=True),
+            theme_icon
         ]),
-        ft.Text("Priority:", size=14, color="white54"),
-        prio_selector,
-        ft.Divider(height=20, color="transparent"),
-        task_view
+        ft.Row([new_task_input, ft.FloatingActionButton(icon=ft.Icons.ADD, on_click=add_clicked)]),
+        filter_tabs,
+        tasks_view,
+        ft.Divider(),
+        ft.Row(
+            alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+            controls=[
+                items_left,
+                ft.TextButton("Clear Completed", on_click=clear_completed, icon=ft.Icons.DELETE_SWEEP)
+            ]
+        )
     )
 
-if __name__ == "__main__":
-    ft.app(target=main)
+    load_data()
+
+ft.app(target=main)
