@@ -1,5 +1,6 @@
 import flet as ft
 import json
+import time
 
 class Task(ft.Column):
     def __init__(self, name, completed, on_status_change, on_delete):
@@ -33,71 +34,56 @@ def main(page: ft.Page):
     page.title = "Ultimate To-Do"
     page.horizontal_alignment = ft.CrossAxisAlignment.CENTER
     page.scroll = ft.ScrollMode.ADAPTIVE
+    page.theme_mode = ft.ThemeMode.LIGHT # Set a default immediately
     
-    # --- UI Elements ---
     tasks_view = ft.Column()
     new_task_input = ft.TextField(hint_text="What needs to be done?", expand=True)
     items_left = ft.Text("0 active tasks")
 
-    # --- Storage Logic ---
     def save_data():
         try:
             task_data = [{"name": t.task_name, "completed": t.completed} for t in tasks_view.controls]
             page.client_storage.set("tasks", json.dumps(task_data))
-            # Save theme as a string "dark" or "light"
             page.client_storage.set("theme", page.theme_mode.value)
-        except Exception as e:
-            print(f"Save Error: {e}")
+        except:
+            pass
 
     def load_data():
+        # Small delay to prevent black screen crash on Android startup
+        time.sleep(0.5) 
         try:
-            # 1. Load Theme safely
-            saved_theme = page.client_storage.get("theme")
-            if saved_theme:
+            if page.client_storage.contains_key("theme"):
+                saved_theme = page.client_storage.get("theme")
                 page.theme_mode = ft.ThemeMode(saved_theme)
-                # Update the icon to match the loaded theme
                 theme_icon.icon = ft.Icons.LIGHT_MODE if page.theme_mode == ft.ThemeMode.DARK else ft.Icons.DARK_MODE
-            else:
-                page.theme_mode = ft.ThemeMode.LIGHT
 
-            # 2. Load Tasks safely - check if key exists first
             if page.client_storage.contains_key("tasks"):
                 saved_tasks = page.client_storage.get("tasks")
                 if saved_tasks:
-                    tasks_list = json.loads(saved_tasks)
-                    for item in tasks_list:
+                    for item in json.loads(saved_tasks):
                         tasks_view.controls.append(
                             Task(item["name"], item["completed"], update_view, delete_task)
                         )
             update_view()
-        except Exception as ex:
-            print(f"Error loading data: {ex}")
-            # If it fails, just refresh the view to show an empty app instead of a crash
+        except:
             update_view()
 
-    # --- App Logic ---
     def update_view(e=None):
-        # Determine filter status
         status = filter_tabs.tabs[filter_tabs.selected_index].text
         count = 0
         for task in tasks_view.controls:
-            task.visible = (
-                status == "all"
-                or (status == "active" and not task.completed)
-                or (status == "completed" and task.completed)
-            )
+            task.visible = (status == "all" or 
+                          (status == "active" and not task.completed) or 
+                          (status == "completed" and task.completed))
             if not task.completed:
                 count += 1
-        
         items_left.value = f"{count} active tasks"
         save_data()
         page.update()
 
     def add_clicked(e):
         if new_task_input.value != "":
-            tasks_view.controls.append(
-                Task(new_task_input.value, False, update_view, delete_task)
-            )
+            tasks_view.controls.append(Task(new_task_input.value, False, update_view, delete_task))
             new_task_input.value = ""
             update_view()
 
@@ -117,34 +103,27 @@ def main(page: ft.Page):
         save_data()
         page.update()
 
-    # --- Layout Components ---
     theme_icon = ft.IconButton(ft.Icons.DARK_MODE, on_click=toggle_theme)
-    
     filter_tabs = ft.Tabs(
         selected_index=0,
         on_change=update_view,
         tabs=[ft.Tab(text="all"), ft.Tab(text="active"), ft.Tab(text="completed")],
     )
 
+    
     page.add(
-        ft.Row([
-            ft.Text("My Tasks", style=ft.TextThemeStyle.HEADLINE_MEDIUM, expand=True),
-            theme_icon
-        ]),
+        ft.Row([ft.Text("My Tasks", style=ft.TextThemeStyle.HEADLINE_MEDIUM, expand=True), theme_icon]),
         ft.Row([new_task_input, ft.FloatingActionButton(icon=ft.Icons.ADD, on_click=add_clicked)]),
         filter_tabs,
         tasks_view,
         ft.Divider(),
-        ft.Row(
-            alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-            controls=[
-                items_left,
-                ft.TextButton("Clear Completed", on_click=clear_completed, icon=ft.Icons.DELETE_SWEEP)
-            ]
-        )
+        ft.Row(alignment=ft.MainAxisAlignment.SPACE_BETWEEN, controls=[
+            items_left,
+            ft.TextButton("Clear Completed", on_click=clear_completed, icon=ft.Icons.DELETE_SWEEP)
+        ])
     )
 
-    # Trigger the load sequence
+
     load_data()
 
 ft.app(target=main)
